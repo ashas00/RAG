@@ -173,6 +173,15 @@ Measured on 4 CPU cores with the provided moulinette (`--k 10`):
 - `search_dataset` on 100 questions: about **0.3 s** (limit: 90 s / 200).
 - Index on disk: about 30 MB.
 
+Answer generation (NumPy Qwen3-0.6B, float32, same 4 cores):
+
+- Model load: about 10-15 s (download of ~1.5 GB the first time).
+- Prompt processing: about 6 s for 1000 tokens, 20 s for 2300 tokens
+  (the prompt is processed in blocks of 256 tokens with the cache).
+- Decoding: about 13 tokens/s.
+- So one answer takes roughly 15-35 s and `answer_dataset` on 100
+  questions about 30-50 minutes. RAM: about 3.5 GB.
+
 What each change brought (Recall@5 docs / code):
 
 | Change | docs | code |
@@ -188,11 +197,14 @@ What each change brought (Recall@5 docs / code):
 - **Spans, not text, in the index**: smaller index, and answers are always
   built from the real file content.
 - **No PyTorch**: `torch` + `transformers` are several GB. Qwen3 is a
-  plain decoder-only transformer, so its forward pass fits in ~250 lines
+  plain decoder-only transformer, so its forward pass fits in ~270 lines
   of NumPy: RMSNorm, grouped-query attention with per-head q/k norm, RoPE,
   SwiGLU MLP, a key/value cache, and greedy decoding. Weights are the
   official `Qwen/Qwen3-0.6B` safetensors (bf16, converted to float32).
   The tokenizer is the official `tokenizer.json` loaded with `tokenizers`.
+  The implementation was checked against Hugging Face `transformers` on
+  random Qwen3 models (fp32 and bf16 weights, tied and untied embeddings):
+  logits agree to 1e-6 and greedy decoding gives the same tokens.
 - **Prompt**: system prompt asks to answer only from the context, briefly,
   and to say when the context is not enough. Sources are added best
   first, each with its file path, until about 8000 characters (~2500
@@ -238,7 +250,7 @@ What each change brought (Recall@5 docs / code):
 An AI assistant (Claude) was used to:
 - review the existing code and list what was missing against the subject;
 - refactor the CLI error handling and write the pytest suite;
-- write the NumPy Qwen3 runtime;
+- write the NumPy Qwen3 runtime and check it against `transformers`;
 - run the recall experiments (file types, folder weights, chunk sizes);
 - draft this README.
 

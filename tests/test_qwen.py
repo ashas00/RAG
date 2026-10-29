@@ -3,6 +3,9 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
+
+from src import qwen
 
 from src.qwen import Qwen3, load_safetensors
 
@@ -91,3 +94,13 @@ def test_generate_stops(tmp_path: Path) -> None:
     assert len(out) == 5
     first = out[0]
     assert model.generate([1, 2, 3], 5, stop_ids={first}) == []
+
+
+def test_block_prefill_matches_single_pass(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Splitting the prompt into blocks must not change the output."""
+    model = make_model(tmp_path)
+    prompt = [5, 8, 13, 21, 34, 2, 4, 6, 8, 10, 12]
+    whole = model.generate(prompt, 8, set(), repetition_penalty=1.1)
+    monkeypatch.setattr(qwen, "PREFILL_BLOCK", 3)
+    assert model.generate(prompt, 8, set(), repetition_penalty=1.1) == whole

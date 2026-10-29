@@ -17,6 +17,9 @@ from numpy.typing import NDArray
 
 Array = NDArray[np.float32]
 
+# Prompt tokens processed per forward pass.
+PREFILL_BLOCK = 256
+
 
 @dataclass
 class Qwen3Config:
@@ -139,7 +142,7 @@ class Qwen3:
         if "lm_head.weight" in weights and not self.config.tie_word_embeddings:
             self.lm_head = linear("lm_head.weight")
         else:
-            self.lm_head = np.ascontiguousarray(self.embed.T)
+            self.lm_head = self.embed.T  # shared weights: a view, no copy
         self.norm = weights["model.norm.weight"]
         self.layers: list[Layer] = []
         for i in range(self.config.num_layers):
@@ -196,9 +199,10 @@ class Qwen3:
         scores = grouped @ keys[:, None].transpose(0, 1, 3, 2)
         scores *= np.float32(c.head_dim ** -0.5)
         # Token i (absolute position start+i) may not look at later tokens.
-        key_pos = np.arange(start + n)[None, :]
-        future = key_pos > (start + np.arange(n))[:, None]
-        scores[..., future] = -np.inf
+        if n > 1:
+            key_pos = np.arange(start + n)[None, :]
+            future = key_pos > (start + np.arange(n))[:, None]
+            scores += np.where(future, -np.inf, 0.0).astype(np.float32)
         out = softmax(scores) @ values[:, None]
         merged = out.reshape(c.num_heads, n, c.head_dim).transpose(1, 0, 2)
         result: Array = (merged.reshape(n, -1) @ layer.o_proj).astype(
@@ -242,8 +246,11 @@ class Qwen3:
         k_cache = [np.zeros(shape, np.float32) for _ in self.layers]
         v_cache = [np.zeros(shape, np.float32) for _ in self.layers]
 
-        # The whole prompt goes through at once, then one token at a time.
-        logits = self.forward(prompt, 0, k_cache, v_cache)
+        # The prompt goes through in blocks (bounded memory), then the
+        # answer is produced one token at a time.
+        for start in range(0, len(prompt), PREFILL_BLOCK):
+            block = prompt[start:start + PREFILL_BLOCK]
+            logits = self.forward(block, start, k_cache, v_cache)
         seen = set(prompt)
         output: list[int] = []
         for _ in range(max_new_tokens):
