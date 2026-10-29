@@ -3,14 +3,15 @@ name = "rag"
 version = "0.1.0"
 description = "Retrieval-Augmented Generation over the vLLM codebase"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "bm25s>=0.3.14",
     "fire>=0.7.1",
+    "huggingface-hub>=1.0.0",
+    "numpy>=1.26",
     "pydantic>=2.14.1",
-    "torch>=2.15.0",
+    "tokenizers>=0.22.0",
     "tqdm>=4.70.1",
-    "transformers>=5.21.1",
 ]
 
 [dependency-groups]
@@ -18,17 +19,13 @@ dev = [
     "flake8>=7.4.1",
     "mypy>=2.4.0",
     "pytest>=9.1.1",
+    "types-tqdm",
 ]
 
-[tool.uv.sources]
-torch = [{ index = "pytorch-cpu" }]
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
-
 [tool.mypy]
-python_version = "3.12"
 plugins = ["pydantic.mypy"]
-exclude = ["^\\.venv/", "^data/", "^moulinette/"]
+exclude = ["^\\.venv/", "^data/"]
+
+[[tool.mypy.overrides]]
+module = ["bm25s", "fire"]
+ignore_missing_imports = true

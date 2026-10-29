@@ -4,23 +4,27 @@ import re
 
 from pydantic import BaseModel
 
+from src.models import MinimalSource
+
 
 class Chunk(BaseModel):
-    """A piece of a corpus file with its character span."""
+    """A piece of a corpus file: its character span and its text."""
 
     file_path: str
     start: int
     end: int
     text: str
 
+    def to_source(self) -> MinimalSource:
+        """Return the span as a MinimalSource (what retrieval outputs)."""
+        return MinimalSource(file_path=self.file_path,
+                             first_character_index=self.start,
+                             last_character_index=self.end)
+
 
 def _line_offsets(text: str) -> list[int]:
     """Return the character offset where each line starts."""
-    offsets = [0]
-    for i, char in enumerate(text):
-        if char == "\n":
-            offsets.append(i + 1)
-    return offsets
+    return [0] + [m.end() for m in re.finditer("\n", text)]
 
 
 def _split_by_boundaries(
@@ -70,23 +74,19 @@ def python_boundaries(text: str) -> list[int]:
         tree = ast.parse(text)
     except (SyntaxError, ValueError):
         return [offsets[i] for i, line in enumerate(text.split("\n"))
-                if not line.strip() and i < len(offsets)]
-    cuts: list[int] = []
+                if not line.strip()]
+    nodes: list[ast.stmt] = []
     for node in tree.body:
-        start = node.lineno
-        # Include decorators in the chunk of the function/class.
-        decorators = getattr(node, "decorator_list", [])
-        if decorators:
-            start = min(d.lineno for d in decorators)
-        cuts.append(offsets[start - 1])
+        nodes.append(node)
         if isinstance(node, ast.ClassDef):
-            for sub in node.body:
-                sub_start = sub.lineno
-                sub_decs = getattr(sub, "decorator_list", [])
-                if sub_decs:
-                    sub_start = min(d.lineno for d in sub_decs)
-                cuts.append(offsets[sub_start - 1])
-    return cuts
+            nodes.extend(node.body)
+    return [offsets[_first_line(node) - 1] for node in nodes]
+
+
+def _first_line(node: ast.stmt) -> int:
+    """First line of a statement, decorators included."""
+    decorators: list[ast.expr] = getattr(node, "decorator_list", [])
+    return min([node.lineno] + [d.lineno for d in decorators])
 
 
 HEADING = re.compile(r"^#{1,6} ", re.MULTILINE)
