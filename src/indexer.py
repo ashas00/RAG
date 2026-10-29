@@ -8,7 +8,8 @@ from tqdm import tqdm
 
 from src.chunker import Chunk, chunk_file
 
-EXTENSIONS = (".py", ".md")
+# .txt: CMakeLists.txt and requirements files answer some docs questions.
+EXTENSIONS = (".py", ".md", ".txt")
 BM25_DIR = "bm25"
 CHUNKS_FILE = "chunks.json"
 

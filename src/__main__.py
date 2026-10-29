@@ -113,7 +113,7 @@ class RagCLI:
             raise CLIError(f"corpus directory {raw_dir} not found")
         count = build_index(str(raw_dir), str(index_dir), size)
         if count == 0:
-            raise CLIError(f"no .py or .md file to index in {raw_dir}")
+            raise CLIError(f"no file to index in {raw_dir}")
         print(f"Ingestion complete! Indexed {count} chunks "
               f"under {index_dir}/")
 
