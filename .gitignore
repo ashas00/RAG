@@ -6,5 +6,6 @@ wheels/
 *.egg-info
 .venv
 moulinette
+moulinette-*
 data
 src/__pycache__
